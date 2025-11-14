@@ -12,8 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
 from ..schemas import HealthResponse, StatsResponse, WebhookConversionComplete
-from ...DATABASE.session import get_db_session
-from ...DATABASE.CACHE_MANAGER import SystemManager, ConvertManager
+from BACKEND.DATABASE.session import get_db_session
+from BACKEND.DATABASE.CACHE_MANAGER import SystemManager, ConvertManager
 
 
 router = APIRouter(tags=["system"])

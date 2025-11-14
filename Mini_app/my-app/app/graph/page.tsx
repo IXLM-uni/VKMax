@@ -1,3 +1,5 @@
+// Руководство к файлу (app/graph/page.tsx)
+// Назначение: Страница визуализации JSON-графа для выбранного файла, обёртка над GraphViewer, FileSidebar и LLMChat.
 "use client"
 
 import { useState, useEffect } from "react"
@@ -5,16 +7,17 @@ import { Menu, MessageCircle } from "lucide-react"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { FileSidebar } from "@/components/graph/file-sidebar"
-import { MermaidViewer } from "@/components/graph/mermaid-viewer"
+import { GraphViewer } from "@/components/graph/mermaid-viewer"
 import { LLMChat } from "@/components/graph/llm-chat"
 import { useFileStore } from "@/lib/store"
+import type { GraphJson } from "@/lib/types"
 
 export default function GraphPage() {
   const searchParams = useSearchParams()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null)
-  const [mermaidChart, setMermaidChart] = useState<string | null>(null)
+  const [graph, setGraph] = useState<GraphJson | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const { files } = useFileStore()
 
@@ -26,9 +29,9 @@ export default function GraphPage() {
   }, [searchParams])
 
   useEffect(() => {
-    const fetchMermaidChart = async () => {
+    const fetchGraph = async () => {
       if (!selectedFileId) {
-        setMermaidChart(null)
+        setGraph(null)
         return
       }
 
@@ -36,16 +39,16 @@ export default function GraphPage() {
       try {
         const response = await fetch(`/api/graph/${selectedFileId}`)
         const data = await response.json()
-        setMermaidChart(data.mermaid_chart || null)
+        setGraph(data.graph || null)
       } catch (error) {
-        console.error("[v0] Error fetching mermaid chart:", error)
-        setMermaidChart(null)
+        console.error("[v0] Error fetching graph:", error)
+        setGraph(null)
       } finally {
         setIsLoading(false)
       }
     }
 
-    fetchMermaidChart()
+    fetchGraph()
   }, [selectedFileId])
 
   const handleGenerateSchema = async () => {
@@ -57,9 +60,9 @@ export default function GraphPage() {
         method: "POST",
       })
       const data = await response.json()
-      setMermaidChart(data.mermaid_chart)
+      setGraph(data.graph || null)
     } catch (error) {
-      console.error("[v0] Error generating mermaid chart:", error)
+      console.error("[v0] Error generating graph:", error)
     } finally {
       setIsLoading(false)
     }
@@ -98,7 +101,7 @@ export default function GraphPage() {
             </div>
           </div>
         ) : (
-          <MermaidViewer chart={mermaidChart} fileId={selectedFileId} onGenerate={handleGenerateSchema} />
+          <GraphViewer graph={graph} fileId={selectedFileId} onGenerate={handleGenerateSchema} />
         )}
       </div>
 

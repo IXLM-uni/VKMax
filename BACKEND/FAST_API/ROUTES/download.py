@@ -10,8 +10,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ...DATABASE.session import get_db_session
-from ...DATABASE.CACHE_MANAGER import DownloadManager
+from BACKEND.DATABASE.session import get_db_session
+from BACKEND.DATABASE.CACHE_MANAGER import DownloadManager
 
 
 router = APIRouter(tags=["download"])

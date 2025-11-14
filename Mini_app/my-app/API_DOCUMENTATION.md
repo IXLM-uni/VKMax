@@ -270,35 +270,50 @@ Lists all supported file formats.
 
 ## Graph Visualization
 
-### Get Mermaid Chart
+### Get JSON Graph
 **GET** `/graph/{fileId}`
 
-Retrieves the Mermaid diagram for a file.
+Retrieves the domain JSON graph for a file. The JSON graph can be mapped to React Flow nodes/edges on the client.
 
 **Response:** `200 OK`
-\`\`\`json
+```json
 {
   "file_id": "string",
-  "mermaid_chart": "string | null",
+  "graph": {
+    "nodes": [
+      { "id": "string", "label": "string", "type": "string", "data": {} }
+    ],
+    "edges": [
+      { "id": "string", "source": "string", "target": "string", "label": "string", "type": "string" }
+    ],
+    "meta": {
+      "source_title": "string",
+      "generated_at": "ISO8601 timestamp"
+    }
+  },
   "generated_at": "ISO8601 timestamp"
 }
-\`\`\`
+```
 
 ---
 
-### Generate Mermaid Chart
+### Generate JSON Graph
 **POST** `/graph/{fileId}`
 
-Generates a new Mermaid diagram for a file.
+Generates a new domain JSON graph for a file.
 
 **Response:** `200 OK`
-\`\`\`json
+```json
 {
   "file_id": "string",
-  "mermaid_chart": "string",
+  "graph": {
+    "nodes": [],
+    "edges": [],
+    "meta": {}
+  },
   "generated_at": "ISO8601 timestamp"
 }
-\`\`\`
+```
 
 ---
 

@@ -1,45 +1,99 @@
+// Руководство к файлу (components/graph/mermaid-viewer.tsx)
+// Назначение: Viewer JSON-графа с использованием @xyflow/react (React Flow/XYFlow) с базовым редактированием.
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import mermaid from "mermaid"
+import { useCallback, useEffect, useState } from "react"
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  MiniMap,
+  useNodesState,
+  useEdgesState,
+  addEdge,
+  getIncomers,
+  getOutgoers,
+  getConnectedEdges,
+  type Node,
+  type Edge,
+  type Connection,
+} from "@xyflow/react"
+import "@xyflow/react/dist/style.css"
 import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
+import type { GraphJson } from "@/lib/types"
 
-interface MermaidViewerProps {
-  chart: string | null
+interface GraphViewerProps {
+  graph: GraphJson | null
   fileId: string
   onGenerate: () => void
 }
 
-export function MermaidViewer({ chart, fileId, onGenerate }: MermaidViewerProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
+export function GraphViewer({ graph, fileId, onGenerate }: GraphViewerProps) {
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node[]>([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge[]>([])
 
   useEffect(() => {
-    mermaid.initialize({
-      startOnLoad: true,
-      theme: "default",
-      securityLevel: "loose",
-    })
-  }, [])
-
-  useEffect(() => {
-    const renderChart = async () => {
-      if (containerRef.current && chart) {
-        try {
-          setError(null)
-          containerRef.current.innerHTML = ""
-          const { svg } = await mermaid.render(`mermaid-${fileId}`, chart)
-          containerRef.current.innerHTML = svg
-        } catch (err) {
-          console.error("[v0] Mermaid render error:", err)
-          setError("Failed to render chart")
-        }
-      }
+    if (!graph) {
+      setNodes([])
+      setEdges([])
+      return
     }
-    renderChart()
-  }, [chart, fileId])
+
+    const initialNodes: Node[] = graph.nodes.map((n, index) => ({
+      id: n.id,
+      data: { label: n.label, ...(n.data || {}) },
+      position: {
+        x: (index % 5) * 220,
+        y: Math.floor(index / 5) * 140,
+      },
+      type: n.type || "default",
+    }))
+
+    const initialEdges: Edge[] = graph.edges.map((e) => ({
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      label: e.label,
+      type: e.type || "default",
+    }))
+
+    setNodes(initialNodes)
+    setEdges(initialEdges)
+  }, [graph, fileId, setNodes, setEdges])
+
+  const onConnect = useCallback(
+    (connection: Connection) => {
+      setEdges((eds: Edge[]) => addEdge(connection, eds))
+    },
+    [setEdges],
+  )
+
+  const onNodesDelete = useCallback(
+    (deleted: Node[]) => {
+      setEdges((eds: Edge[]) =>
+        deleted.reduce((acc: Edge[], node: Node) => {
+          const incomers = getIncomers(node, nodes, acc)
+          const outgoers = getOutgoers(node, nodes, acc)
+          const connectedEdges = getConnectedEdges([node], acc)
+
+          const remainingEdges = acc.filter((edge: Edge) => !connectedEdges.includes(edge))
+
+          const createdEdges = incomers.flatMap(({ id: source }: Node) =>
+            outgoers.map(({ id: target }: Node) => ({
+              id: `${source}->${target}`,
+              source,
+              target,
+            })),
+          )
+
+          return [...remainingEdges, ...createdEdges]
+        }, eds),
+      )
+    },
+    [nodes, setEdges],
+  )
 
   const handleGenerate = async () => {
     setIsLoading(true)
@@ -47,7 +101,7 @@ export function MermaidViewer({ chart, fileId, onGenerate }: MermaidViewerProps)
     setIsLoading(false)
   }
 
-  if (!chart) {
+  if (!graph) {
     return (
       <div className="w-full h-full flex items-center justify-center p-8">
         <div className="text-center space-y-4">
@@ -70,7 +124,7 @@ export function MermaidViewer({ chart, fileId, onGenerate }: MermaidViewerProps)
           <div className="space-y-2">
             <h3 className="text-lg font-semibold">No Graph Available</h3>
             <p className="text-sm text-muted-foreground max-w-md">
-              Generate a Mermaid diagram to visualize the structure and relationships in this file.
+              Generate a JSON graph to visualize the structure and relationships in this file using React Flow.
             </p>
           </div>
           <Button
@@ -86,22 +140,23 @@ export function MermaidViewer({ chart, fileId, onGenerate }: MermaidViewerProps)
     )
   }
 
-  if (error) {
-    return (
-      <div className="w-full h-full flex items-center justify-center p-8">
-        <div className="text-center space-y-2">
-          <p className="text-sm text-destructive">{error}</p>
-          <Button onClick={handleGenerate} variant="outline" size="sm">
-            Retry
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="w-full h-full flex items-center justify-center p-4 md:p-8 overflow-auto">
-      <div ref={containerRef} className="w-full max-w-4xl" />
+    <div className="w-full h-full flex items-center justify-center p-4 md:p-8 overflow-hidden">
+      <div className="w-full h-full max-w-5xl max-h-[80vh] border rounded-lg bg-background">
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onNodesDelete={onNodesDelete}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          fitView
+        >
+          <Background />
+          <MiniMap />
+          <Controls />
+        </ReactFlow>
+      </div>
     </div>
   )
 }

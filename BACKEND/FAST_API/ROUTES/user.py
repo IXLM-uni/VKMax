@@ -13,8 +13,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..schemas import UserCreateRequest, UserResponse
-from ...DATABASE.session import get_db_session
-from ...DATABASE.CACHE_MANAGER import UserManager
+from BACKEND.DATABASE.session import get_db_session
+from BACKEND.DATABASE.CACHE_MANAGER import UserManager
 
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -32,7 +32,7 @@ async def create_user(payload: UserCreateRequest, session: AsyncSession = Depend
         "id": str(getattr(obj, "id")),
         "max_id": getattr(obj, "max_id"),
         "name": getattr(obj, "name"),
-        "metadata": getattr(obj, "metadata") or {},
+        "metadata": getattr(obj, "extra_metadata") or {},
         "created_at": getattr(obj, "created_at").isoformat() if getattr(obj, "created_at") else _now_iso(),
     }
 
@@ -51,7 +51,7 @@ async def get_user(user_id: str, session: AsyncSession = Depends(get_db_session)
         "id": str(getattr(obj, "id")),
         "max_id": getattr(obj, "max_id"),
         "name": getattr(obj, "name"),
-        "metadata": getattr(obj, "metadata") or {},
+        "metadata": getattr(obj, "extra_metadata") or {},
         "created_at": getattr(obj, "created_at").isoformat() if getattr(obj, "created_at") else _now_iso(),
     }
 

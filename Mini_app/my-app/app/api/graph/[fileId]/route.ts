@@ -1,76 +1,97 @@
 import { type NextRequest, NextResponse } from "next/server"
 
-const mockMermaidCharts = new Map([
+type GraphNode = {
+  id: string
+  label: string
+  type?: string
+  data?: Record<string, unknown>
+}
+
+type GraphEdge = {
+  id: string
+  source: string
+  target: string
+  label?: string
+  type?: string
+}
+
+type GraphJson = {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+  meta?: {
+    source_title?: string
+    generated_at?: string
+    [key: string]: unknown
+  }
+}
+
+const mockGraphs = new Map<string, GraphJson>([
   [
     "1",
-    `graph TD
-    A[Document Processing] --> B[Format Detection]
-    B --> C{Valid Format?}
-    C -->|Yes| D[Parse Content]
-    C -->|No| E[Error Handler]
-    D --> F[Extract Metadata]
-    F --> G[Structure Analysis]
-    G --> H[Generate Output]
-    H --> I[Quality Check]
-    I --> J[Final Document]
-    E --> K[Return Error]`,
-  ],
-  [
-    "2",
-    `graph LR
-    A[Financial Report] --> B[Income Statement]
-    A --> C[Balance Sheet]
-    A --> D[Cash Flow]
-    B --> E[Revenue Analysis]
-    B --> F[Expense Breakdown]
-    C --> G[Assets]
-    C --> H[Liabilities]
-    D --> I[Operating Activities]
-    D --> J[Investing Activities]`,
-  ],
-  [
-    "3",
-    `graph TD
-    A[Data Export] --> B[CSV Parser]
-    B --> C[Column Detection]
-    C --> D[Data Validation]
-    D --> E[Type Inference]
-    E --> F[Transform Data]
-    F --> G[Excel Converter]
-    G --> H[Format Cells]
-    H --> I[Export File]`,
+    {
+      nodes: [
+        { id: "A", label: "Document Processing", type: "step" },
+        { id: "B", label: "Format Detection", type: "step" },
+        { id: "C", label: "Valid Format?", type: "decision" },
+        { id: "D", label: "Parse Content", type: "step" },
+        { id: "E", label: "Error Handler", type: "step" },
+      ],
+      edges: [
+        { id: "A-B", source: "A", target: "B", label: "" },
+        { id: "B-C", source: "B", target: "C", label: "" },
+        { id: "C-D", source: "C", target: "D", label: "Yes" },
+        { id: "C-E", source: "C", target: "E", label: "No" },
+      ],
+      meta: {
+        source_title: "Sample document pipeline",
+        generated_at: new Date().toISOString(),
+      },
+    },
   ],
 ])
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ fileId: string }> }) {
   const { fileId } = await params
-  const mermaidChart = mockMermaidCharts.get(fileId)
+  const graph = mockGraphs.get(fileId)
 
-  if (!mermaidChart) {
-    return NextResponse.json({ mermaid_chart: null }, { status: 200 })
+  if (!graph) {
+    return NextResponse.json({ file_id: fileId, graph: null, generated_at: null }, { status: 200 })
   }
 
   return NextResponse.json({
     file_id: fileId,
-    mermaid_chart: mermaidChart,
-    generated_at: new Date().toISOString(),
+    graph,
+    generated_at: graph.meta?.generated_at ?? new Date().toISOString(),
   })
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ fileId: string }> }) {
   const { fileId } = await params
 
-  // Mock generating a new mermaid chart
-  const newChart = `graph TD
-    A[File Upload] --> B[Processing]
-    B --> C[Conversion]
-    C --> D[Download]`
+  // Mock generating a new JSON graph
+  const newGraph: GraphJson = {
+    nodes: [
+      { id: "A", label: "File Upload", type: "step" },
+      { id: "B", label: "Processing", type: "step" },
+      { id: "C", label: "Conversion", type: "step" },
+      { id: "D", label: "Download", type: "step" },
+    ],
+    edges: [
+      { id: "A-B", source: "A", target: "B" },
+      { id: "B-C", source: "B", target: "C" },
+      { id: "C-D", source: "C", target: "D" },
+    ],
+    meta: {
+      source_title: `Generated graph for file ${fileId}`,
+      generated_at: new Date().toISOString(),
+    },
+  }
 
-  mockMermaidCharts.set(fileId, newChart)
+  mockGraphs.set(fileId, newGraph)
 
   return NextResponse.json({
     file_id: fileId,
-    mermaid_chart: newChart,
-    generated_at: new Date().toISOString(),
+    graph: newGraph,
+    generated_at: newGraph.meta?.generated_at,
   })
 }

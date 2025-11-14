@@ -11,6 +11,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+import logging
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Query, Depends
 from sqlalchemy import select
@@ -18,10 +19,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
 from ..schemas import FileUploadWebsiteRequest, FileUploadResponse, FilesPage
-from ...DATABASE.session import get_db_session
-from ...DATABASE.CACHE_MANAGER import FilesManager, ConvertManager
-from ...DATABASE.models import Format, File as FileModel
+from BACKEND.DATABASE.session import get_db_session
+from BACKEND.DATABASE.CACHE_MANAGER import FilesManager, ConvertManager
+from BACKEND.DATABASE.models import Format, File as FileModel
+from BACKEND.CONVERT import enqueue_website_job
 
+
+logger = logging.getLogger("vkmax.fastapi.files")
 
 router = APIRouter(tags=["files"])
 
@@ -113,7 +117,12 @@ async def upload_website(payload: FileUploadWebsiteRequest, session: AsyncSessio
     # Создаём website-операцию (без хранения URL в БД)
     target_fmt_id = await _resolve_format_id(session, payload.format, None)
     cm = ConvertManager(session)
+    logger.info("[/upload/website] create website operation user_id=%s format=%s url=%s", payload.user_id, payload.format, payload.url)
     op = await cm.create_website_operation(user_id=int(payload.user_id) if payload.user_id else None, target_format_id=target_fmt_id)
+    try:
+        await enqueue_website_job(session, operation_id=int(getattr(op, "id")))
+    except Exception as exc:  # noqa: WPS430
+        logger.exception("[/upload/website] Failed to enqueue website operation_id=%s: %s", getattr(op, "id"), exc)
     return {
         "file_id": None,
         "operation_id": int(getattr(op, "id")),

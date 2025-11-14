@@ -11,6 +11,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 import orjson
 import tldextract
 from bs4 import BeautifulSoup  # type: ignore
+from html import escape as html_escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -163,21 +164,24 @@ class PdfBookBuilder:
             if getattr(el, "name", None) is None:
                 continue
             name = el.name.lower()
-            txt = (el.get_text(" ").strip())
+            raw_txt = el.get_text(" ").strip()
+            # Экранируем спецсимволы, чтобы ReportLab не пытался интерпретировать
+            # случайные подстроки как разметку (<a style=...> и т.п.).
+            txt = html_escape(raw_txt)
             if not txt:
                 continue
             if name in ("h1",):
-                flows.append(Paragraph(txt, self.styles["h1"]))
+                flows.append(Paragraph(html_escape(txt), self.styles["h1"]))
             elif name in ("h2",):
-                flows.append(Paragraph(txt, self.styles["h2"]))
+                flows.append(Paragraph(html_escape(txt), self.styles["h2"]))
             elif name in ("h3", "h4", "h5", "h6"):
-                flows.append(Paragraph(txt, self.styles["h3"]))
-            elif name == "p":
-                flows.append(Paragraph(txt, self.styles["p"]))
+                flows.append(Paragraph(html_escape(txt), self.styles["h3"]))
+            elif name in ("p"):
+                flows.append(Paragraph(html_escape(txt), self.styles["p"]))
             elif name in ("blockquote",):
-                flows.append(Paragraph(txt, self.styles["blockquote"]))
+                flows.append(Paragraph(html_escape(txt), self.styles["blockquote"]))
             elif name in ("pre", "code"):
-                flows.append(Preformatted(txt, self.styles["pre"]))
+                flows.append(Preformatted(html_escape(txt), self.styles["pre"]))
             elif name in ("ul", "ol"):
                 for li in el.find_all("li", recursive=False):
                     flows.append(Paragraph(li.get_text(" ").strip(), self.styles["bullet"], bulletText="• "))
@@ -218,14 +222,32 @@ class PdfBookBuilder:
 
         story: List = []
 
+        # Заголовок книги: если задан site_url, использум его FQDN
+        if site_url:
+            site_fqdn, _ = self._fqdn_and_segments(site_url)
+            book_title = f"Книга сайта {site_fqdn}"
+        else:
+            book_title = "Книга ссылок и контента"
+
         # Крышка
-        story.append(Paragraph("Книга ссылок и контента", self.styles["title"]))
+        story.append(Paragraph(book_title, self.styles["title"]))
         story.append(Spacer(1, 6))
 
         # Оглавление (простое): перечислим FQDN
         story.append(Paragraph("Оглавление", self.styles["h1"]))
+
+        # Подсчёт количества страниц по каждому fqdn
+        fqdn_counts: Dict[str, int] = {}
+        for fqdn, first_map in by_fqdn.items():
+            total = 0
+            for second_map in first_map.values():
+                for urls_list in second_map.values():
+                    total += len(urls_list)
+            fqdn_counts[fqdn] = total
+
         for fqdn in sorted(by_fqdn.keys()):
-            story.append(Paragraph(f"• {fqdn}", self.styles["p"]))
+            cnt = fqdn_counts.get(fqdn, 0)
+            story.append(Paragraph(f"• {fqdn} — {cnt} страниц", self.styles["p"]))
         story.append(PageBreak())
 
         # Основные главы
@@ -250,4 +272,15 @@ class PdfBookBuilder:
                         story.append(Spacer(1, 6))
             story.append(PageBreak())
 
-        doc.build(story)
+        # Нумерация страниц
+        def _add_page_number(canvas, document):  # type: ignore[override]
+            page_num = canvas.getPageNumber()
+            txt = f"Стр. {page_num}"
+            canvas.setFont(self._font_regular, 8)
+            canvas.drawRightString(
+                document.pagesize[0] - 15 * mm,
+                10 * mm,
+                txt,
+            )
+
+        doc.build(story, onFirstPage=_add_page_number, onLaterPages=_add_page_number)

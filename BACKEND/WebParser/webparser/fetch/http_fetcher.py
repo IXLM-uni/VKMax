@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from typing import Optional, Dict
+import logging
 
 from playwright.async_api import async_playwright, APIRequestContext, Playwright
 
@@ -20,6 +21,7 @@ class HttpFetcher:
         self._max_redirects = max_redirects
         self._pw: Optional[Playwright] = None
         self._ctx: Optional[APIRequestContext] = None
+        self._log = logging.getLogger(__name__)
 
     async def start(self) -> None:
         if self._ctx is not None:
@@ -34,6 +36,7 @@ class HttpFetcher:
             },
             timeout=self._timeout_ms,
             max_redirects=self._max_redirects,
+            ignore_https_errors=True,  # позволяем ходить на сайты с кривыми сертификатами
         )
 
     async def stop(self) -> None:
@@ -46,7 +49,14 @@ class HttpFetcher:
 
     async def fetch(self, url: str) -> FetchResult:
         assert self._ctx is not None, "HttpFetcher.start() must be called first"
-        resp = await self._ctx.get(url)
+        try:
+            resp = await self._ctx.get(url)
+        except Exception as e:
+            # При таймауте/сетевой ошибке логируем и возвращаем пустой результат со status=0,
+            # чтобы оркестратор мог продолжить обход.
+            self._log.warning("http-fetch-failed url=%s err=%r", url, e)
+            return FetchResult(url=url, final_url=None, status=0, content_type=None, text=None)
+
         # финальный URL после редиректов не отдается напрямую, используем response.url
         final_url = resp.url
         status = resp.status

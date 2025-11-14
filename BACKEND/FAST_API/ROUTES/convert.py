@@ -7,11 +7,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
+import logging
 
 from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..config import settings
 from ..schemas import (
     ConvertRequest,
     ConvertWebsiteRequest,
@@ -22,10 +24,18 @@ from ..schemas import (
     WebsitePreviewRequest,
     WebsitePreviewResponse,
 )
-from ...DATABASE.session import get_db_session
-from ...DATABASE.CACHE_MANAGER import ConvertManager
-from ...DATABASE.models import Format, File as FileModel
+from BACKEND.DATABASE.session import get_db_session
+from BACKEND.DATABASE.CACHE_MANAGER import ConvertManager
+from BACKEND.DATABASE.models import Format, File as FileModel
+from BACKEND.CONVERT import (
+    run_file_conversion,
+    generate_graph_for_operation,
+    enqueue_website_job,
+    get_website_status,
+    build_website_preview,
+)
 
+logger = logging.getLogger("vkmax.fastapi.convert")
 
 router = APIRouter(tags=["convert"])
 
@@ -38,9 +48,14 @@ async def _resolve_format_id(session: AsyncSession, fmt: Optional[str]) -> Optio
     if not fmt:
         return None
     key = str(fmt).lower().lstrip('.')
-    res = await session.execute(select(Format).where(Format.file_extension.in_([key, f'.{key}'])))
+    query = select(Format)
+    if key in {"graph", "graph_json"}:
+        query = query.where(Format.type == "graph")
+    else:
+        query = query.where(Format.file_extension.in_([key, f".{key}"]))
+    res = await session.execute(query)
     f = res.scalars().first()
-    return int(getattr(f, 'id')) if f is not None else None
+    return int(getattr(f, "id")) if f is not None else None
 
 
 @router.post("/convert", response_model=OperationResponse)
@@ -53,14 +68,31 @@ async def convert(payload: ConvertRequest, session: AsyncSession = Depends(get_d
     cm = ConvertManager(session)
     target_fmt_id = await _resolve_format_id(session, payload.target_format)
 
+    logger.info("[/convert] create operation user_id=%s source_file_id=%s url=%s target_format=%s", payload.user_id, payload.source_file_id, payload.url, payload.target_format)
+
     if payload.source_file_id:
         try:
             fid = int(payload.source_file_id)
         except Exception:
+            logger.error("[/convert] Bad source_file_id=%s", payload.source_file_id)
             raise HTTPException(400, "Bad source_file_id")
         op = await cm.create_file_operation(user_id=int(payload.user_id) if payload.user_id else None, source_file_id=fid, target_format_id=target_fmt_id)
+
+        # Сразу пытаемся выполнить файловую конвертацию (MVP без очереди)
+        try:
+            if payload.target_format in {"docx", "pdf"}:
+                await run_file_conversion(session, operation_id=int(getattr(op, "id")), storage_dir=settings.storage_dir)
+            elif payload.target_format == "graph":
+                await generate_graph_for_operation(session, operation_id=int(getattr(op, "id")), storage_dir=settings.storage_dir)
+        except Exception as exc:  # noqa: WPS430
+            logger.exception("[/convert] Failed to process operation_id=%s: %s", getattr(op, "id"), exc)
     else:
         op = await cm.create_website_operation(user_id=int(payload.user_id) if payload.user_id else None, target_format_id=target_fmt_id)
+        # Website-операции пока только логируем и оставляем в статусе queued
+        try:
+            await enqueue_website_job(session, operation_id=int(getattr(op, "id")))
+        except Exception as exc:  # noqa: WPS430
+            logger.exception("[/convert] Failed to enqueue website operation_id=%s: %s", getattr(op, "id"), exc)
 
     return OperationResponse(operation_id=str(getattr(op, 'id')), status='queued', estimated_time=5.0, queue_position=None)
 
@@ -69,7 +101,15 @@ async def convert(payload: ConvertRequest, session: AsyncSession = Depends(get_d
 async def convert_website(payload: ConvertWebsiteRequest, session: AsyncSession = Depends(get_db_session)):
     cm = ConvertManager(session)
     target_fmt_id = await _resolve_format_id(session, payload.target_format)
+
+    logger.info("[/convert/website] create website operation user_id=%s target_format=%s", payload.user_id, payload.target_format)
+
     op = await cm.create_website_operation(user_id=int(payload.user_id) if payload.user_id else None, target_format_id=target_fmt_id)
+    try:
+        await enqueue_website_job(session, operation_id=int(getattr(op, "id")))
+    except Exception as exc:  # noqa: WPS430
+        logger.exception("[/convert/website] Failed to enqueue website operation_id=%s: %s", getattr(op, "id"), exc)
+
     return OperationResponse(operation_id=str(getattr(op, 'id')), status='queued', estimated_time=5.0, queue_position=None)
 
 
@@ -146,9 +186,10 @@ async def website_status(operation_id: str, session: AsyncSession = Depends(get_
     try:
         oid = int(operation_id)
     except Exception:
+        logger.error("[/websites/{id}/status] Bad operation id=%s", operation_id)
         raise HTTPException(400, "Bad operation id")
-    cm = ConvertManager(session)
-    op = await cm.get_operation(oid)
+
+    op = await get_website_status(session, operation_id=oid)
     if op is None:
         raise HTTPException(404, "Website operation not found")
     return WebsiteStatusResponse(
@@ -162,9 +203,13 @@ async def website_status(operation_id: str, session: AsyncSession = Depends(get_
 
 @router.post("/websites/preview", response_model=WebsitePreviewResponse)
 async def website_preview(payload: WebsitePreviewRequest):
-    # MVP-заглушка: прелоадер по URL
-    title = payload.url
-    return WebsitePreviewResponse(title=title, description=None, screenshot_url=None, page_count=None)
+    data = await build_website_preview(payload.url)
+    return WebsitePreviewResponse(
+        title=data.get("title"),
+        description=data.get("description"),
+        screenshot_url=data.get("screenshot_url"),
+        page_count=data.get("page_count"),
+    )
 
 
 @router.get("/websites/history")

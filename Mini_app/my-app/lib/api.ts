@@ -1,3 +1,7 @@
+// Руководство к файлу (lib/api.ts)
+// Назначение: Клиент VKMax FAST_API для Mini_app. Содержит функции для загрузки файлов,
+// конвертации, работы с сайтами и получения статусов/справочников. Все маршруты
+// синхронизированы с BACKEND/FAST_API/ROUTES.
 import type { ConvertFile, ConversionOperation } from "./types"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api"
@@ -34,15 +38,19 @@ export async function uploadWebsite(
   name?: string,
   format?: string,
 ): Promise<{ fileId: string; operationId: string; status: string }> {
+  const payload: any = {
+    user_id: userId,
+    url,
+    name: name || new URL(url).hostname,
+  }
+  if (format) {
+    payload.format = format
+  }
+
   const response = await fetch(`${API_BASE}/upload/website`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      user_id: userId,
-      url,
-      name: name || new URL(url).hostname,
-      format: format || "site",
-    }),
+    body: JSON.stringify(payload),
   })
 
   if (!response.ok) {
@@ -51,8 +59,8 @@ export async function uploadWebsite(
 
   const data = await response.json()
   return {
-    fileId: data.file_id,
-    operationId: data.operation_id,
+    fileId: data.file_id ?? null,
+    operationId: String(data.operation_id),
     status: data.status,
   }
 }
@@ -70,7 +78,6 @@ export async function convertFile(
       source_file_id: fileId,
       target_format: targetFormat,
       user_id: userId,
-      is_website: isWebsite,
     }),
   })
 
@@ -168,7 +175,22 @@ export async function getUserFiles(userId: string): Promise<ConvertFile[]> {
   if (!response.ok) {
     throw new Error("Не удалось получить файлы пользователя")
   }
-  return response.json()
+  const data = (await response.json()) as any[]
+
+  return data.map((file: any): ConvertFile => {
+    const id = String(file.id ?? file.file_id)
+    const createdAt = file.created_at ?? file.upload_date ?? new Date().toISOString()
+
+    return {
+      id,
+      name: file.filename ?? file.name ?? "file",
+      size: typeof file.size === "number" ? file.size : 0,
+      originalFormat: file.format ?? "",
+      status: "uploaded",
+      uploadDate: new Date(createdAt),
+      downloadUrl: `${API_BASE}/download/${id}`,
+    }
+  })
 }
 
 export async function getSupportedConversions(): Promise<Record<string, string[]>> {

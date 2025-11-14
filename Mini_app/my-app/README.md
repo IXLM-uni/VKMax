@@ -1,6 +1,6 @@
 # File Converter Application
 
-A mobile-first file converter application with graph visualization capabilities built with Next.js 16, React 19, TypeScript, Zustand, and Mermaid.
+A mobile-first file converter application with graph visualization capabilities built with Next.js 16, React 19, TypeScript, Zustand, and React Flow.
 
 ## Features
 
@@ -12,8 +12,8 @@ Three-step conversion process:
 
 ### 2. Graph Visualization (Page 2)
 - Sidebar with file management (click menu icon to open)
-- Mermaid diagram visualization of file structure
-- Generate schema button for files without visualization
+- Interactive JSON graph visualization of file structure using React Flow
+- Generate graph button for files without visualization
 - LLM chat for questions about file formats
 
 ## Tech Stack
@@ -21,7 +21,7 @@ Three-step conversion process:
 - **Framework**: Next.js 16 (App Router)
 - **UI**: React 19, Tailwind CSS v4, shadcn/ui
 - **State Management**: Zustand with persistence
-- **Graph Visualization**: Mermaid.js
+- **Graph Visualization**: JSON Graph + React Flow
 - **Icons**: Lucide React
 
 ## Brand Colors
@@ -32,7 +32,7 @@ Three-step conversion process:
 
 ## Project Structure
 
-\`\`\`
+```
 app/
 ├── converter/          # File converter page
 │   └── page.tsx
@@ -48,7 +48,7 @@ components/
 │   └── download-step.tsx
 ├── graph/              # Graph visualization components
 │   ├── file-sidebar.tsx
-│   ├── mermaid-viewer.tsx
+│   ├── react-flow-viewer.tsx
 │   └── llm-chat.tsx
 ├── navigation/         # Navigation components
 │   ├── top-nav.tsx
@@ -60,11 +60,11 @@ lib/
 ├── store.ts            # Zustand state management
 ├── types.ts            # TypeScript types
 └── api.ts              # API client functions
-\`\`\`
+```
 
 ## Getting Started
 
-\`\`\`bash
+```bash
 # Install dependencies
 npm install
 
@@ -76,7 +76,7 @@ npm run build
 
 # Start production server
 npm start
-\`\`\`
+```
 
 Open [http://localhost:3000](http://localhost:3000) to view the application.
 
@@ -114,4 +114,4 @@ Files are persisted in localStorage using Zustand middleware. The state includes
 - Maximum file size: 1GB (configurable)
 - Files auto-delete after 8 hours for privacy
 - LLM chat is simulation-ready (connect your LLM API)
-- Mermaid diagrams generated on-demand
+- JSON graphs generated on-demand and rendered via React Flow

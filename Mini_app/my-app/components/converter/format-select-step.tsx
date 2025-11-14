@@ -115,7 +115,7 @@ export function FormatSelectStep() {
                   htmlFor={`graph-${file.id}`}
                   className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
                 >
-                  Сгенерировать граф-визуализацию Mermaid
+                  Сгенерировать граф-визуализацию (JSON + React Flow)
                 </label>
               </div>
             </div>

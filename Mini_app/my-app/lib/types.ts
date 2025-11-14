@@ -1,5 +1,32 @@
 export type FileStatus = "uploading" | "uploaded" | "converting" | "converted" | "error"
 
+export interface GraphNode {
+  id: string
+  label: string
+  type?: string
+  data?: Record<string, unknown>
+}
+
+export interface GraphEdge {
+  id: string
+  source: string
+  target: string
+  label?: string
+  type?: string
+}
+
+export interface GraphMeta {
+  source_title?: string
+  generated_at?: string
+  [key: string]: unknown
+}
+
+export interface GraphJson {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+  meta?: GraphMeta
+}
+
 export interface ConvertFile {
   id: string
   name: string
@@ -9,7 +36,7 @@ export interface ConvertFile {
   status: FileStatus
   uploadDate: Date
   downloadUrl?: string
-  mermaidSchema?: string
+  graphJson?: GraphJson
   generateGraph?: boolean // Added field to track if graph should be generated
   url?: string // URL веб-сайта, если это конвертация сайта
   isWebsite?: boolean // Флаг, указывающий на то, что это веб-сайт
