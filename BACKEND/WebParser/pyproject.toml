@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "webparser"
+version = "0.1.0"
+description = "Высокоскоростной асинхронный веб-парсер для построения графа ссылок"
+readme = "README.md"
+authors = [{name = "Alexander"}]
+requires-python = ">=3.10"
+dependencies = [
+  "playwright>=1.48.0",
+  "selectolax>=0.3.21",
+  "aiolimiter>=1.1.0",
+  "tldextract>=5.1.2",
+  "orjson>=3.10.7",
+]
+
+[project.optional-dependencies]
+bloom = ["bloom-filter2>=2.0.0"]
+nx = ["networkx>=3.2"]
+viz = ["networkx>=3.2", "matplotlib>=3.8"]
+pdf = ["reportlab>=3.6", "beautifulsoup4>=4.12.2"]
+
+[tool.setuptools.packages.find]
+include = ["webparser*"]
+
+[tool.webparser]
+# Конфигурация по умолчанию может использоваться позже для CLI
