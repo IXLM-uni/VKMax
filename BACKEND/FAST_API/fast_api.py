@@ -11,14 +11,23 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
+
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from dotenv import load_dotenv
 
 from .config import settings
 from BACKEND.CONVERT.logging_config import setup_logging
+
+# Загружаем переменные окружения из BACKEND/.env до инициализации сервисов
+_BASE_DIR = Path(__file__).resolve().parent.parent
+_DOTENV_PATH = _BASE_DIR / ".env"
+if _DOTENV_PATH.exists():  # безопасно для продакшена: в Docker можно не класть .env
+    load_dotenv(dotenv_path=_DOTENV_PATH)
 
 # Инициализируем централизованное логирование до создания FastAPI-приложения
 setup_logging()
@@ -72,6 +81,8 @@ from .ROUTES import format as format_router  # noqa: E402
 from .ROUTES import files as files_router  # noqa: E402
 from .ROUTES import download as download_router  # noqa: E402
 from .ROUTES import convert as convert_router  # noqa: E402
+from .ROUTES import auth as auth_router  # noqa: E402
+from .ROUTES import graph as graph_router  # noqa: E402
 
 app.include_router(user_router.router)
 app.include_router(system_router.router)
@@ -79,6 +90,8 @@ app.include_router(format_router.router)
 app.include_router(files_router.router)
 app.include_router(download_router.router)
 app.include_router(convert_router.router)
+app.include_router(auth_router.router)
+app.include_router(graph_router.router)
 
 @app.get("/")
 async def root():

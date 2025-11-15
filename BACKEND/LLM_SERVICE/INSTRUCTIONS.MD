@@ -86,16 +86,20 @@ VKMAX_LLM_PROVIDER=mock
 
 1. Сервис/роут собирает `plain_text` документа и параметры.
 2. В `DocumentGenerator.registry` заранее зарегистрирована задача, например
-   `"graph_from_document"` c `doc_type="graph_json"` и промптом.
-3. Код вызывает `await document_generator.worker_work("graph_from_document", text=...)`.
+   `"graph_from_document"` c `doc_type="json"` и промптом, который просит
+   модель вернуть упрощённый JSON‑outline (`entities`/`relations`/`meta`).
+3. Код вызывает `await document_generator.create_document("graph_from_document", document_text=plain_text)`.
 4. Внутри происходит:
    - генерация промпта по шаблону;
    - вызов `LlmService.generate()` (DeepSeek/OpenRouter или mock);
-   - очистка через `CleanerService`;
-   - валидация через `ValidatorService` в строгую Pydantic‑схему;
+   - очистка через `CleanerService` (для `doc_type="json"` — вырезание markdown‑ограждений);
+   - (опциональная) валидация через `ValidatorService` в Pydantic‑схему;
    - повторные попытки при ошибках (до `max_attempts`).
 
-Результат — Pydantic‑модель или сырая строка (в зависимости от схемы).
+Результат для кейса `graph_from_document` — строка с JSON‑outline, которую
+далее обрабатывает `CONVERT/graph_service.py`, превращая её в итоговый
+граф (`nodes`/`edges`/`meta`). Для других задач результатом может быть
+Pydantic‑модель или сырая строка (в зависимости от схемы).
 
 ## 5. Тестирование LLM‑слоя
 

@@ -26,7 +26,7 @@ FastAPI не содержит тяжёлой бизнес‑логики: она
 
 - `fast_api.py`
   - Точка сборки FastAPI‑приложения:
-    - вызывает `SEVICES.setup_logging()` **до** создания `FastAPI()`;
+    - вызывает `setup_logging()` из `BACKEND.CONVERT.logging_config` **до** создания `FastAPI()`;
     - инициализирует `app`, подключает роутеры из `ROUTES`;
     - настраивает CORS и базовые middleware/exception‑handlers.
   - Импортируется в тестах (`TESTS/conftest.py`) для поднятия приложения в памяти.
@@ -37,7 +37,8 @@ FastAPI не содержит тяжёлой бизнес‑логики: она
   - `convert.py` — создание операций конвертации, статусы и история `/operations` и `/websites/*`;
   - `download.py` — скачивание/preview файлов по `file_id`;
   - `format.py` — список форматов и матрица поддерживаемых конвертаций;
-  - `system.py` — `/health`, `/stats`, `/webhook/conversion-complete`.
+  - `system.py` — `/health`, `/stats`, `/webhook/conversion-complete`;
+  - `graph.py` — работа с JSON-графами по файлам (`GET/POST /graph/{file_id}`).
 
 - `schemas.py`
   - Pydantic‑модели запросов/ответов для всех REST‑методов.
@@ -77,8 +78,18 @@ FastAPI не содержит тяжёлой бизнес‑логики: она
   - создаёт операции конвертации через `ConvertManager`;
   - для файловых операций вызывает:
     - `CONVERT.run_file_conversion` для `pdf/docx`;
-    - `CONVERT.generate_graph_for_operation` для `target_format="graph"`;
+    - `CONVERT.generate_graph_for_operation` для `target_format="graph"` — внутри
+      реализован двухшаговый пайплайн: LLM возвращает упрощённый JSON-outline
+      (`entities`/`relations`/`meta`), а Python‑код строит итоговый граф
+      (`nodes`/`edges`/`meta`).
   - для website‑операций вызывает `CONVERT.enqueue_website_job` и оставляет статус `queued`.
+
+- `ROUTES/graph.py`:
+  - `GET /graph/{file_id}` — возвращает ранее сгенерированный JSON‑граф для файла
+    или `graph=null`, если результата ещё нет (вся логика поиска — в
+    `SEVICES.graph_service.get_graph_for_file`);
+  - `POST /graph/{file_id}` — через `SEVICES.graph_service.generate_graph_for_file`
+    создаёт операцию, запускает LLM‑пайплайн и возвращает готовый graph JSON.
 
 - `ROUTES/files.py`:
   - `POST /upload` — принимает файл, создаёт запись `File` и исходную операцию;
@@ -106,6 +117,8 @@ FastAPI не содержит тяжёлой бизнес‑логики: она
   - `test_flow_file_to_graph_e2e.py` — `upload → convert(graph) → download graph JSON`;
   - `test_flow_website_convert_e2e.py` — `convert/website → status → history`;
   - `test_flow_root_health_e2e.py` — базовый health‑чек.
+  - `test_flow_assets_files_e2e.py` — сценарии с реальными файлами из `TESTS/assets/files` (DOCX/PDF).
+  - `test_flow_real_conversions_e2e.py` — реальные цепочки DOCX↔PDF и DOCX/PDF→Graph с настоящим LLM (OpenRouter/DeepSeek), помеченные `skipif`, если окружение не готово.
 
 Запуск всех тестов:
 

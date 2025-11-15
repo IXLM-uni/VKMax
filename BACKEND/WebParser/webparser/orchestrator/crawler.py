@@ -154,6 +154,9 @@ class CrawlerOrchestrator:
             # инкремент processed, закрываем когда достигли лимита
             async with self._cnt_lock:
                 self._processed += 1
+                # Простое информирование о прогрессе: каждые 50 страниц
+                if self._processed == 1 or self._processed % 50 == 0:
+                    self.log.info("progress: processed=%d queue=%d", self._processed, self.frontier.size())
                 if self._processed >= self.cfg.max_pages:
                     self.log.info("stop: reached max_pages=%d", self.cfg.max_pages)
                     self._stop_event.set()

@@ -33,6 +33,7 @@ async def seed_formats() -> None:
             Format(id=3, type="website", prompt=None, file_extension=".url", is_input=True, is_output=False),   # website marker
             Format(id=4, type="document", prompt=None, file_extension=".html", is_input=True, is_output=True),   # html
             Format(id=5, type="graph", prompt=None, file_extension=".json", is_input=False, is_output=True),   # graph
+            Format(id=6, type="site_bundle", prompt=None, file_extension=".site_bundle.json", is_input=False, is_output=True),  # WebParser JSON-bundle
         ]
         session.add_all(items)
         await session.commit()

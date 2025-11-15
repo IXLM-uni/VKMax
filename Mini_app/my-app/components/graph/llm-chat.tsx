@@ -81,6 +81,29 @@ export function LLMChat({ isOpen, onClose }: LLMChatProps) {
         </Button>
       </div>
 
+      {/* Инпут сверху контейнера */}
+      <div className="p-4 border-b">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            handleSend()
+          }}
+          className="flex gap-2"
+        >
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask a question..."
+            className="flex-1"
+            disabled={isLoading}
+          />
+          <Button type="submit" size="icon" className="bg-[#0077FF] hover:bg-[#0077FF]/90" disabled={isLoading}>
+            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          </Button>
+        </form>
+      </div>
+
+      {/* Сообщения ниже инпута */}
       <ScrollArea className="flex-1 p-4">
         <div className="space-y-4">
           {messages.length === 0 ? (
@@ -119,27 +142,6 @@ export function LLMChat({ isOpen, onClose }: LLMChatProps) {
           )}
         </div>
       </ScrollArea>
-
-      <div className="p-4 border-t">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            handleSend()
-          }}
-          className="flex gap-2"
-        >
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask a question..."
-            className="flex-1"
-            disabled={isLoading}
-          />
-          <Button type="submit" size="icon" className="bg-[#0077FF] hover:bg-[#0077FF]/90" disabled={isLoading}>
-            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          </Button>
-        </form>
-      </div>
     </div>
   )
 }

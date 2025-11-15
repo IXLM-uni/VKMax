@@ -52,28 +52,37 @@
 
 ### 2.2. `graph_service.py`
 
-Задача: построение **доменного JSON‑графа** по документу (DOCX/PDF) через LLM.
+Задача: **высокоуровневая работа с JSON‑графами по файлам VKMax**.
 
-Ответственность:
+Важно различать два слоя:
 
-- Получить исходный файл (путь и формат) через `FilesManager`.
-- Извлечь текст (не более 10 000 слов) через `CONVERT.extract_plain_text`.
-- Подготовить переменные для LLM и вызвать `LLM_SERVICE.DocumentGenerator` с
-  задачей `task_id="graph_from_document"`, `doc_type="graph_json"`.
-- Результат (строка с JSON‑графом: `nodes`/`edges`/`meta`) сохранить как новый
-  `File` формата `graph` в БД (например, расширение `.graph.json`).
-- Обновить операцию через `ConvertManager.update_status`:
-  - `status="completed"`,
-  - `result_file_id=…`.
-- При ошибке логировать stacktrace и проставлять `status="failed"`.
+- Низкоуровневый LLM‑пайплайн находится в `BACKEND.CONVERT.graph_service`
+  (извлечение текста, вызов LLM, построение graph JSON и сохранение в файл).
+- Текущий модуль `BACKEND.SEVICES.graph_service` работает как тонкий
+  оркестратор поверх БД и CONVERT‑сервиса и не содержит LLM‑логики.
 
-Публичные функции (идея):
+Ответственность `SEVICES.graph_service`:
 
-- `async generate_graph_for_operation(operation_id: int) -> None`
-  - Находит операцию, исходный файл, вызывает LLM и обновляет результат.
+- Найти уже сгенерированный граф по исходному `file_id`:
+  - через `Operation` с `status="completed"`, `file_id=...` и `Format.type="graph"`;
+  - прочитать JSON из `File.path` и вернуть как `GraphJson`.
+- Создать новую операцию генерации графа по `file_id` и дождаться результата:
+  - выбрать формат `graph` через `Format`;
+  - создать `Operation` через `ConvertManager.create_file_operation`;
+  - вызвать `BACKEND.CONVERT.generate_graph_for_operation(...)`, который
+    выполняет LLM‑пайплайн и создаёт файл результата;
+  - затем снова использовать поиск, чтобы вернуть итоговый graph JSON.
 
-Вызывается из FastAPI (роут `/convert` при `target_format="graph"`) или
-воркером.
+Публичные функции (фактическая реализация):
+
+- `async get_graph_for_file(session, *, source_file_id: int) -> Optional[dict]`
+  - Возвращает ранее сохранённый граф для файла или `None`, если его нет.
+
+- `async generate_graph_for_file(session, *, source_file_id: int, user_id: Optional[int], storage_dir: str) -> dict`
+  - Создаёт операцию, запускает генерацию графа через CONVERT и возвращает
+    готовый graph JSON (кидает исключение при фатальной ошибке).
+
+Вызывается из FastAPI (роуты `/graph/{file_id}`) или воркером/внешними задачами.
 
 ---
 
@@ -106,6 +115,9 @@
 
 Задача: единая точка настройки логирования для всего BACKEND.
 
+Фактическая реализация сейчас находится в модуле
+`BACKEND/CONVERT/logging_config.py` (исторически относилась к сервисному слою).
+
 Ответственность:
 
 - Настроить root‑логгер и формат:
@@ -114,11 +126,11 @@
 - Определить базовые логгеры:
   - `vkmax.fastapi` — всё, что связано с FastAPI (роуты, middleware);
   - `vkmax.db` — менеджеры БД, Alembic;
-  - `vkmax.convert` — конвертеры файлов;
+  - `vkmax.convert` — конвертеры файлов и граф‑сервисы;
   - `vkmax.llm` — LLM_SERVICE;
   - `vkmax.webparser` — WebParser.
 - Вызывать `setup_logging()` **до** создания FastAPI‑приложения
-  (например, в `FAST_API/fast_api.py`).
+  (см. `FAST_API/fast_api.py`).
 
 Важное требование: при любой необработанной ошибке должен логироваться
 stacktrace, чтобы сразу видеть, **какая функция/строка упала**.
@@ -128,8 +140,8 @@ stacktrace, чтобы сразу видеть, **какая функция/ст
 ## 3. Связь сервисов с FastAPI
 
 1. `FAST_API/fast_api.py`:
-   - Импортирует `setup_logging()` из `SEVICES/logging_config.py` и вызывает
-     его до создания `app`.
+   - Импортирует `setup_logging()` из `BACKEND.CONVERT.logging_config` и
+     вызывает его до создания `app`.
    - В exception‑handlers использует `logger.exception(...)` для логирования
      stacktrace.
    - (Опционально) добавляет middleware с `request_id` и пишет его в каждый лог.

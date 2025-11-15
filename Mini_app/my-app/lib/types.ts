@@ -1,3 +1,7 @@
+// Руководство к файлу (lib/types.ts)
+// Назначение: Общие типы данных Mini_app: статусы файлов, JSON-граф и операции конвертации,
+// синхронизированные со схемами BACKEND/FAST_API/schemas.py.
+
 export type FileStatus = "uploading" | "uploaded" | "converting" | "converted" | "error"
 
 export interface GraphNode {
@@ -40,16 +44,19 @@ export interface ConvertFile {
   generateGraph?: boolean // Added field to track if graph should be generated
   url?: string // URL веб-сайта, если это конвертация сайта
   isWebsite?: boolean // Флаг, указывающий на то, что это веб-сайт
+  resultFileId?: string // ID результата конвертации в БД VKMax (files.id)
 }
 
 export interface ConversionOperation {
-  id: string
-  fileId: string
-  oldFormat: string
-  newFormat: string
-  status: "pending" | "processing" | "completed" | "failed"
+  id: string // operation_id на backend
+  fileId?: string | null
+  userId?: string | null
+  oldFormat?: string | null
+  newFormat?: string | null
+  status: "queued" | "processing" | "completed" | "failed"
   progress: number
-  createdAt: Date
+  createdAt?: Date
+  resultFileId?: string | null
 }
 
 export type ConverterStep = "upload" | "select-format" | "download"

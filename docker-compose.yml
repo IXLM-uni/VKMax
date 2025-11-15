@@ -1,0 +1,62 @@
+# Руководство к файлу (docker-compose.yml)
+# Назначение:
+# - Описание docker-стека VKMax: backend (api), бот (bot), Postgres (db) и фронт (frontend).
+# - Использует BACKEND/.env.compose для переменных окружения backend и бота.
+# - Команда запуска: `docker compose up --build`.
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: vkmax_db
+    environment:
+      POSTGRES_DB: vkmax
+      POSTGRES_USER: vkmax
+      POSTGRES_PASSWORD: vkmax
+    ports:
+      # Внешний порт 25432 -> внутренний 5432, под VKMAX_DATABASE_URL=...@db:25432/vkmax
+      - "25432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: .
+      dockerfile: BACKEND/Dockerfile
+    container_name: vkmax_api
+    env_file:
+      - BACKEND/.env.compose
+    depends_on:
+      - db
+    ports:
+      - "8157:8000"
+    working_dir: /app
+
+  bot:
+    build:
+      context: .
+      dockerfile: BACKEND/Dockerfile
+    container_name: vkmax_bot
+    env_file:
+      - BACKEND/.env.compose
+    depends_on:
+      - db
+      - api
+    working_dir: /app
+    command: ["python3", "-m", "BACKEND.BOT.run_bot"]
+
+  frontend:
+    build:
+      context: Mini_app/my-app
+      dockerfile: Dockerfile
+    container_name: vkmax_frontend
+    environment:
+      # API доступен из фронта по этому URL
+      NEXT_PUBLIC_API_URL: "http://localhost:8157"
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
+    driver: local

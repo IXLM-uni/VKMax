@@ -24,6 +24,7 @@ from .converters import (
     convert_pdf_to_docx,
     convert_pdf_to_pdf,
 )
+from .webparser_service import generate_site_pdf_from_bundle
 from BACKEND.DATABASE.CACHE_MANAGER import ConvertManager, FilesManager
 from BACKEND.DATABASE.models import File as FileModel, Format, Operation
 
@@ -109,6 +110,58 @@ async def run_file_conversion(
         msg = f"source file {file_id} not found"
         logger.error("[conversion_service.run_file_conversion] %s", msg)
         await cm.update_status(operation_id, status="failed", error_message=msg)
+        return
+
+    # Проверяем тип исходного формата: для site_bundle используем специальный поток
+    src_format_id = getattr(src, "format_id", None)
+    src_fmt: Optional[Format] = None
+    if src_format_id is not None:
+        try:
+            res = await session.execute(select(Format).where(Format.id == int(src_format_id)))
+            src_fmt = res.scalars().first()
+        except Exception as exc:  # noqa: WPS430
+            logger.exception(
+                "[conversion_service.run_file_conversion] Failed to load src format id=%s for file_id=%s: %s",
+                src_format_id,
+                file_id,
+                exc,
+            )
+
+    src_type = getattr(src_fmt, "type", None) if src_fmt is not None else None
+    if src_type == "site_bundle":
+        # Для site_bundle обходим файловые конвертеры и строим PDF напрямую из JSON-пакета сайта.
+        logger.info(
+            "[conversion_service.run_file_conversion] Detected site_bundle source file_id=%s, running generate_site_pdf_from_bundle",
+            file_id,
+        )
+        try:
+            new_file_id = await generate_site_pdf_from_bundle(session, file_id=int(file_id), storage_dir=storage_dir)
+        except Exception as exc:  # noqa: WPS430
+            logger.exception(
+                "[conversion_service.run_file_conversion] generate_site_pdf_from_bundle failed for file_id=%s: %s",
+                file_id,
+                exc,
+            )
+            await cm.update_status(operation_id, status="failed", error_message=str(exc))
+            return
+
+        if not new_file_id:
+            msg = "generate_site_pdf_from_bundle returned no result file id"
+            logger.error("[conversion_service.run_file_conversion] %s", msg)
+            await cm.update_status(operation_id, status="failed", error_message=msg)
+            return
+
+        await cm.update_status(
+            operation_id,
+            status="completed",
+            error_message=None,
+            result_file_id=int(new_file_id),
+        )
+        logger.info(
+            "[conversion_service.run_file_conversion] site_bundle operation %s completed, result_file_id=%s",
+            operation_id,
+            int(new_file_id),
+        )
         return
 
     src_path = getattr(src, "path")

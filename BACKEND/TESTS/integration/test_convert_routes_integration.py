@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 
 import pytest
@@ -14,6 +15,7 @@ from BACKEND.DATABASE.session import async_session_factory
 from BACKEND.DATABASE.models import Operation, File, Format
 from BACKEND.DATABASE.CACHE_MANAGER import ConvertManager, FilesManager
 from BACKEND.FAST_API.ROUTES import convert as convert_module
+import BACKEND.CONVERT.webparser_service as webparser_module
 
 
 @pytest.mark.asyncio
@@ -159,3 +161,88 @@ async def test_convert_website_status_and_history(http_client):
     history = resp_history.json()
     ids = {item["operation_id"] for item in history}
     assert operation_id in ids
+
+
+@pytest.mark.asyncio
+async def test_convert_website_to_site_bundle_integration(http_client, monkeypatch):
+    """Website -> site_bundle: /convert/website с заглушенным WebParser.
+
+    Проверяем, что для target_format="site_bundle" создаётся Operation,
+    её статус становится `completed`, в БД появляется File с JSON-bundle и
+    формат имеет type="site_bundle".
+    """
+
+    # Заглушаем низкоуровневый обход, чтобы не ходить в сеть в тестах
+    async def fake_crawl_site_bundle(url: str) -> bytes:  # type: ignore[override]
+        data = {
+            "site_url": url,
+            "crawled_at": "2025-01-01T00:00:00Z",
+            "pages": [
+                {
+                    "id": 0,
+                    "url": url,
+                    "status": 200,
+                    "title": "Test Page",
+                    "text": "Hello from site_bundle",
+                    "content_path": "",
+                    "depth": 0,
+                    "fqdn": "example.com",
+                    "path": "/",
+                    "cluster": "/",
+                }
+            ],
+            "edges": [],
+        }
+        return json.dumps(data, ensure_ascii=False).encode("utf-8")
+
+    monkeypatch.setattr(webparser_module, "_crawl_site_bundle", fake_crawl_site_bundle)
+
+    # 1. Создаём пользователя
+    user_payload = {
+        "max_id": f"website-site-bundle-user-{uuid.uuid4()}",
+        "name": "Website SiteBundle User",
+        "metadata": {"role": "website-site-bundle"},
+    }
+    resp_user = await http_client.post("/users", json=user_payload)
+    assert resp_user.status_code == 200
+    user_id = resp_user.json()["id"]
+
+    # 2. Создаём website-операцию с target_format="site_bundle"
+    conv_payload = {
+        "url": "https://example.com/",
+        "target_format": "site_bundle",
+        "user_id": user_id,
+    }
+    resp_conv = await http_client.post("/convert/website", json=conv_payload)
+    assert resp_conv.status_code == 200
+    op_data = resp_conv.json()
+    operation_id = op_data["operation_id"]
+
+    # 3. Проверяем, что операция завершилась и есть result_file_id
+    async with async_session_factory() as session:
+        res = await session.execute(select(Operation).where(Operation.id == int(operation_id)))
+        op = res.scalars().first()
+        assert op is not None
+        assert getattr(op, "status") == "completed"
+        result_file_id = getattr(op, "result_file_id")
+        assert result_file_id is not None
+
+        # 4. Проверяем файл результата и формат
+        res_file = await session.execute(select(File).where(File.id == int(result_file_id)))
+        file_obj = res_file.scalars().first()
+        assert file_obj is not None
+
+        # формат должен быть site_bundle
+        fmt_id = getattr(file_obj, "format_id")
+        assert fmt_id is not None
+        res_fmt = await session.execute(select(Format).where(Format.id == int(fmt_id)))
+        fmt_obj = res_fmt.scalars().first()
+        assert fmt_obj is not None
+        assert getattr(fmt_obj, "type") == "site_bundle"
+
+        # контент должен быть валидным JSON и содержать ожидаемое поле site_url
+        content = getattr(file_obj, "content")
+        assert content is not None
+        bundle = json.loads(content.decode("utf-8"))
+        assert bundle["site_url"] == "https://example.com/"
+        assert bundle["pages"]

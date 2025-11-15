@@ -24,6 +24,8 @@ from .webparser_service import (
     enqueue_website_job,
     get_website_status,
     build_website_preview,
+    search_site_graph,
+    generate_site_pdf_from_bundle,
 )
 from .logging_config import setup_logging
 
@@ -44,5 +46,7 @@ __all__ = [
     "enqueue_website_job",
     "get_website_status",
     "build_website_preview",
+    "search_site_graph",
+    "generate_site_pdf_from_bundle",
     "setup_logging",
 ]

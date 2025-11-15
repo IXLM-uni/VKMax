@@ -100,7 +100,8 @@ class DocumentGenerator:
         for attempt in range(1, self.max_attempts + 1):
             logger.info("[DocumentGenerator.worker_work] Попытка %s/%s для '%s'", attempt, self.max_attempts, task_id)
 
-            current_prompt = f"{self._format_error_history(error_history)}{base_prompt}"
+            # Сначала базовый промпт, затем (при наличии) контекст предыдущих ошибок.
+            current_prompt = f"{base_prompt}{self._format_error_history(error_history)}"
 
             try:
                 logger.debug(
@@ -122,12 +123,12 @@ class DocumentGenerator:
                 cleaned_output = await self.cleaner.clean(raw_output, doc_type)
                 clean_dt = perf_counter() - clean_t0
 
-                # Валидация опциональна: если схемы нет, просто возвращаем строку
+                # Валидация опциональна: если схемы нет (ValueError), просто возвращаем строку
                 val_t0 = perf_counter()
                 try:
                     validated: Any = await self.validator.validate(cleaned_output, doc_type, task_id)
-                except Exception:
-                    # Если схемы нет или валидация не настроена, отдаём "как есть"
+                except ValueError:
+                    # Нет зарегистрированной схемы – считаем, что валидировать не нужно
                     validated = cleaned_output
                 val_dt = perf_counter() - val_t0
 

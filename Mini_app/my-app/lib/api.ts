@@ -1,15 +1,20 @@
 // Руководство к файлу (lib/api.ts)
 // Назначение: Клиент VKMax FAST_API для Mini_app. Содержит функции для загрузки файлов,
-// конвертации, работы с сайтами и получения статусов/справочников. Все маршруты
-// синхронизированы с BACKEND/FAST_API/ROUTES.
+// конвертации, работы с сайтами и получения статусов/справочников.
+// Важно:
+// - Базовый URL берётся из NEXT_PUBLIC_API_URL (иначе "/api" для dev/mocks).
+// - userId в вызовах upload может быть опциональным (файлы без владельца),
+//   а в convert всегда передаётся строка (в т.ч. пустая) для совместимости со схемами.
 import type { ConvertFile, ConversionOperation } from "./types"
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api"
 
-export async function uploadFile(file: File, userId: string): Promise<ConvertFile> {
+export async function uploadFile(file: File, userId?: string): Promise<ConvertFile> {
   const formData = new FormData()
   formData.append("file", file)
-  formData.append("user_id", userId)
+  if (userId) {
+    formData.append("user_id", userId)
+  }
   formData.append("original_format", file.name.split(".").pop() || "")
 
   const response = await fetch(`${API_BASE}/upload`, {
@@ -34,14 +39,16 @@ export async function uploadFile(file: File, userId: string): Promise<ConvertFil
 
 export async function uploadWebsite(
   url: string,
-  userId: string,
+  userId?: string,
   name?: string,
   format?: string,
 ): Promise<{ fileId: string; operationId: string; status: string }> {
   const payload: any = {
-    user_id: userId,
     url,
     name: name || new URL(url).hostname,
+  }
+  if (userId) {
+    payload.user_id = userId
   }
   if (format) {
     payload.format = format
@@ -68,7 +75,7 @@ export async function uploadWebsite(
 export async function convertFile(
   fileId: string,
   targetFormat: string,
-  userId: string,
+  userId: string = "",
   isWebsite = false,
 ): Promise<ConversionOperation> {
   const response = await fetch(`${API_BASE}/convert`, {
@@ -77,7 +84,7 @@ export async function convertFile(
     body: JSON.stringify({
       source_file_id: fileId,
       target_format: targetFormat,
-      user_id: userId,
+      user_id: userId || "",
     }),
   })
 
@@ -85,17 +92,32 @@ export async function convertFile(
     throw new Error("Не удалось выполнить конвертацию")
   }
 
-  return response.json()
+  const data = await response.json()
+
+  return {
+    id: String(data.operation_id),
+    fileId: null,
+    userId,
+    oldFormat: null,
+    newFormat: targetFormat,
+    status: (data.status ?? "queued") as ConversionOperation["status"],
+    progress: 0,
+    createdAt: new Date(),
+  }
 }
 
-export async function convertWebsite(url: string, targetFormat: string, userId: string): Promise<ConversionOperation> {
+export async function convertWebsite(
+  url: string,
+  targetFormat: string,
+  userId: string = "",
+): Promise<ConversionOperation> {
   const response = await fetch(`${API_BASE}/convert/website`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       url,
       target_format: targetFormat,
-      user_id: userId,
+      user_id: userId || "",
     }),
   })
 
@@ -103,19 +125,30 @@ export async function convertWebsite(url: string, targetFormat: string, userId: 
     throw new Error("Не удалось конвертировать сайт")
   }
 
-  return response.json()
+  const data = await response.json()
+
+  return {
+    id: String(data.operation_id),
+    fileId: null,
+    userId,
+    oldFormat: null,
+    newFormat: targetFormat,
+    status: (data.status ?? "queued") as ConversionOperation["status"],
+    progress: 0,
+    createdAt: new Date(),
+  }
 }
 
 export async function batchConvert(
   operations: Array<{ source_file_id?: string; url?: string; target_format: string }>,
-  userId: string,
+  userId: string = "",
 ): Promise<{ batch_id: string; operations: any[] }> {
   const response = await fetch(`${API_BASE}/batch-convert`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       operations,
-      user_id: userId,
+      user_id: userId || "",
     }),
   })
 
@@ -131,7 +164,20 @@ export async function getOperationStatus(operationId: string): Promise<Conversio
   if (!response.ok) {
     throw new Error("Не удалось получить статус операции")
   }
-  return response.json()
+
+  const data = await response.json()
+
+  return {
+    id: String(data.operation_id),
+    fileId: data.file_id ?? null,
+    userId: data.user_id ?? null,
+    oldFormat: data.old_format ?? null,
+    newFormat: data.new_format ?? null,
+    status: (data.status ?? "queued") as ConversionOperation["status"],
+    progress: typeof data.progress === "number" ? data.progress : 0,
+    createdAt: data.datetime ? new Date(data.datetime) : undefined,
+    resultFileId: data.result_file_id ?? null,
+  }
 }
 
 export async function getWebsiteStatus(operationId: string): Promise<any> {

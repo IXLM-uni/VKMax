@@ -1,3 +1,7 @@
+// Руководство к файлу (components/converter/upload-step.tsx)
+// Назначение: Первый шаг конвертера VKMax в Mini_app: загрузка файлов или ввод URL сайта.
+// Важно: Для файлов сразу вызывается backend (/upload) через lib/api.uploadFile,
+//        сайты пока только добавляются в стор и конвертируются на следующем шаге.
 "use client"
 
 import type React from "react"
@@ -8,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useFileStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
+import { uploadFile } from "@/lib/api"
 
 export function UploadStep() {
   const [isDragging, setIsDragging] = useState(false)
@@ -15,21 +20,20 @@ export function UploadStep() {
   const { addFile, setCurrentStep, conversionType } = useFileStore()
 
   const handleFiles = useCallback(
-    (files: FileList | null) => {
+    async (files: FileList | null) => {
       if (!files) return
 
-      Array.from(files).forEach((file) => {
-        const newFile = {
-          id: crypto.randomUUID(),
-          name: file.name,
-          size: file.size,
-          originalFormat: file.name.split(".").pop() || "",
-          status: "uploaded" as const,
-          uploadDate: new Date(),
-          isWebsite: false,
+      const uploads = Array.from(files).map(async (file) => {
+        try {
+          const uploaded = await uploadFile(file)
+          addFile(uploaded)
+        } catch (error) {
+          // TODO: можно показать уведомление пользователю, пока логируем в консоль
+          console.error("Не удалось загрузить файл", error)
         }
-        addFile(newFile)
       })
+
+      await Promise.all(uploads)
 
       setCurrentStep("select-format")
     },

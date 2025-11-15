@@ -1,97 +1,66 @@
+// Руководство к файлу (app/api/graph/[fileId]/route.ts)
+// Назначение: Next.js API-роут, который проксирует запросы граф-визуализации к FastAPI.
+// - GET /api/graph/{fileId}: проксирует запрос к FAST_API /graph/{file_id},
+//   который возвращает уже сгенерированный JSON-граф (или null, если его нет).
+// - POST /api/graph/{fileId}: проксирует запрос к FAST_API /graph/{file_id},
+//   который запускает генерацию графа и сразу возвращает готовый graph JSON.
 import { type NextRequest, NextResponse } from "next/server"
+// Базовый URL FastAPI (совпадает с lib/api.ts). Если не задан, считаем, что backend доступен на /api.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api"
 
-type GraphNode = {
-  id: string
-  label: string
-  type?: string
-  data?: Record<string, unknown>
-}
+// ----------------------------- GET: читать готовый граф -----------------------------
 
-type GraphEdge = {
-  id: string
-  source: string
-  target: string
-  label?: string
-  type?: string
-}
-
-type GraphJson = {
-  nodes: GraphNode[]
-  edges: GraphEdge[]
-  meta?: {
-    source_title?: string
-    generated_at?: string
-    [key: string]: unknown
-  }
-}
-
-const mockGraphs = new Map<string, GraphJson>([
-  [
-    "1",
-    {
-      nodes: [
-        { id: "A", label: "Document Processing", type: "step" },
-        { id: "B", label: "Format Detection", type: "step" },
-        { id: "C", label: "Valid Format?", type: "decision" },
-        { id: "D", label: "Parse Content", type: "step" },
-        { id: "E", label: "Error Handler", type: "step" },
-      ],
-      edges: [
-        { id: "A-B", source: "A", target: "B", label: "" },
-        { id: "B-C", source: "B", target: "C", label: "" },
-        { id: "C-D", source: "C", target: "D", label: "Yes" },
-        { id: "C-E", source: "C", target: "E", label: "No" },
-      ],
-      meta: {
-        source_title: "Sample document pipeline",
-        generated_at: new Date().toISOString(),
-      },
-    },
-  ],
-])
-
-export async function GET(request: NextRequest, { params }: { params: Promise<{ fileId: string }> }) {
+export async function GET(_request: NextRequest, { params }: { params: Promise<{ fileId: string }> }) {
   const { fileId } = await params
-  const graph = mockGraphs.get(fileId)
 
-  if (!graph) {
+  try {
+    const res = await fetch(`${API_BASE}/graph/${fileId}`)
+    if (!res.ok) {
+      return NextResponse.json({ file_id: fileId, graph: null, generated_at: null }, { status: 200 })
+    }
+
+    const data = await res.json()
+    const graph = (data as any)?.graph ?? null
+    const meta = (graph as any)?.meta ?? {}
+
+    return NextResponse.json({
+      file_id: fileId,
+      graph,
+      generated_at: meta.generated_at ?? new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error("[/api/graph/[fileId]] GET error", error)
     return NextResponse.json({ file_id: fileId, graph: null, generated_at: null }, { status: 200 })
   }
-
-  return NextResponse.json({
-    file_id: fileId,
-    graph,
-    generated_at: graph.meta?.generated_at ?? new Date().toISOString(),
-  })
 }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ fileId: string }> }) {
+// ----------------------------- POST: сгенерировать граф -----------------------------
+
+export async function POST(_request: NextRequest, { params }: { params: Promise<{ fileId: string }> }) {
   const { fileId } = await params
 
-  // Mock generating a new JSON graph
-  const newGraph: GraphJson = {
-    nodes: [
-      { id: "A", label: "File Upload", type: "step" },
-      { id: "B", label: "Processing", type: "step" },
-      { id: "C", label: "Conversion", type: "step" },
-      { id: "D", label: "Download", type: "step" },
-    ],
-    edges: [
-      { id: "A-B", source: "A", target: "B" },
-      { id: "B-C", source: "B", target: "C" },
-      { id: "C-D", source: "C", target: "D" },
-    ],
-    meta: {
-      source_title: `Generated graph for file ${fileId}`,
-      generated_at: new Date().toISOString(),
-    },
+  try {
+    const res = await fetch(`${API_BASE}/graph/${fileId}`, {
+      method: "POST",
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => "")
+      console.error("[/api/graph/[fileId]] POST /graph failed", res.status, text)
+      return NextResponse.json({ file_id: fileId, graph: null, generated_at: null }, { status: 500 })
+    }
+
+    const data = await res.json()
+    const graph = (data as any)?.graph ?? null
+    const meta = (graph as any)?.meta ?? {}
+
+    return NextResponse.json({
+      file_id: fileId,
+      graph,
+      generated_at: meta.generated_at ?? new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error("[/api/graph/[fileId]] POST error", error)
+    return NextResponse.json({ file_id: fileId, graph: null, generated_at: null }, { status: 500 })
   }
-
-  mockGraphs.set(fileId, newGraph)
-
-  return NextResponse.json({
-    file_id: fileId,
-    graph: newGraph,
-    generated_at: newGraph.meta?.generated_at,
-  })
 }
+

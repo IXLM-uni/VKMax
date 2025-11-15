@@ -30,6 +30,13 @@ class UserManager(BaseManager):
     async def get_user(self, user_id: int) -> Optional[User]:
         return await self.get_by_id(User, user_id)
 
+    async def get_user_by_max_id(self, max_id: str) -> Optional[User]:
+        """Найти пользователя по внешнему идентификатору MAX (поле User.max_id)."""
+
+        q = select(User).where(User.max_id == max_id)
+        res = await self.session.execute(q)
+        return res.scalars().first()
+
     async def delete_user(self, user_id: int) -> bool:
         affected = await self.delete_by_id(User, user_id)
         return affected > 0

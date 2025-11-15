@@ -31,8 +31,8 @@ interface GraphViewerProps {
 
 export function GraphViewer({ graph, fileId, onGenerate }: GraphViewerProps) {
   const [isLoading, setIsLoading] = useState(false)
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node[]>([])
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge[]>([])
+  const [nodes, setNodes, onNodesChange] = useNodesState([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState([])
 
   useEffect(() => {
     if (!graph) {

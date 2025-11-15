@@ -56,7 +56,8 @@ class ConvertManager(BaseManager):
         return op
 
     async def create_website_operation(self, *, user_id: Optional[int], target_format_id: Optional[int]) -> Operation:
-        # Помечаем website через old_format_id = id("website")
+        # Помечаем website через old_format_id = id("website") (формат .url),
+        # а целевой формат (html/site_bundle/graph и т.п.) сохраняем в new_format_id.
         website_fmt_id = await self._get_format_id_by_ext('url')
         op = await self.create(
             Operation,

@@ -2,6 +2,7 @@
 # Назначение:
 # - Централизованные Pydantic-схемы запросов/ответов FastAPI для VKMax.
 # - Минимально достаточные поля под MVP (in-memory), совместимы с будущей БД.
+# - Описывает также схемы для JSON-графов и поиска по ним (GraphSearch*).
 
 from __future__ import annotations
 
@@ -108,6 +109,7 @@ class OperationStatusResponse(BaseModel):
     datetime: str
     status: str
     progress: int = 0
+    result_file_id: Optional[str] = None
 
 
 class BatchConvertResponse(BaseModel):
@@ -144,6 +146,26 @@ class WebsiteHistoryItem(BaseModel):
     status: str
 
 
+# --------------------------- Graph / Search ---------------------------
+
+class GraphSearchRequest(BaseModel):
+    """Запрос на построение GraphJson-подграфа по файлу.
+
+    file_id указывает на исходный файл (например, site_bundle), query — строка
+    поиска по содержимому (может быть пустой для полного графа).
+    """
+
+    file_id: str
+    query: Optional[str] = None
+
+
+class GraphSearchResponse(BaseModel):
+    """Ответ поиска графа: GraphJson или None, завёрнутый с file_id."""
+
+    file_id: str
+    graph: Optional[Dict[str, Any]] = None
+
+
 # --------------------------- Formats ---------------------------
 
 class FormatItem(BaseModel):
@@ -177,3 +199,22 @@ class WebhookConversionComplete(BaseModel):
     converted_file_id: Optional[str] = None
     error_message: Optional[str] = None
     type: Optional[str] = None
+
+
+# --------------------------- MAX WebApp Auth ---------------------------
+
+
+class MaxWebAppAuthRequest(BaseModel):
+    """Запрос авторизации мини‑приложения MAX.
+
+    Поле init_data — строка WebAppData, переданная мини‑аппой.
+    """
+
+    init_data: str
+
+
+class MaxWebAppAuthResponse(BaseModel):
+    """Ответ авторизации: внутренний user_id VKMax и данные пользователя MAX."""
+
+    user_id: str
+    max_user: Dict[str, Any]

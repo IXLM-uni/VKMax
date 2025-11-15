@@ -63,7 +63,16 @@ async def _resolve_format_id(session: AsyncSession, value: Optional[str], fallba
     key = (value or (fallback_filename.split(".")[-1] if fallback_filename and "." in fallback_filename else None) or "").lower().lstrip(".")
     if not key:
         return None
-    res = await session.execute(select(Format).where(Format.file_extension.in_([key, f".{key}"])) )
+
+    query = select(Format)
+    if key in {"graph", "graph_json"}:
+        query = query.where(Format.type == "graph")
+    elif key in {"site_bundle", "site_bundle_json"}:
+        query = query.where(Format.type == "site_bundle")
+    else:
+        query = query.where(Format.file_extension.in_([key, f".{key}"]))
+
+    res = await session.execute(query)
     f = res.scalars().first()
     return int(getattr(f, "id")) if f is not None else None
 
@@ -120,7 +129,7 @@ async def upload_website(payload: FileUploadWebsiteRequest, session: AsyncSessio
     logger.info("[/upload/website] create website operation user_id=%s format=%s url=%s", payload.user_id, payload.format, payload.url)
     op = await cm.create_website_operation(user_id=int(payload.user_id) if payload.user_id else None, target_format_id=target_fmt_id)
     try:
-        await enqueue_website_job(session, operation_id=int(getattr(op, "id")))
+        await enqueue_website_job(session, operation_id=int(getattr(op, "id")), url=payload.url)
     except Exception as exc:  # noqa: WPS430
         logger.exception("[/upload/website] Failed to enqueue website operation_id=%s: %s", getattr(op, "id"), exc)
     return {

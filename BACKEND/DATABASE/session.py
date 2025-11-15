@@ -1,9 +1,9 @@
  # Руководство к файлу (DATABASE/session.py)
  # Назначение:
  # - Асинхронная настройка SQLAlchemy: движок, фабрика сессий, зависимость get_db_session.
- # - По умолчанию SQLite (aiosqlite), далее возможен переход на Postgres без изменения интерфейса.
+ # - По умолчанию SQLite (aiosqlite), для Docker/Postgres используется URL из окружения.
  # Важно:
- # - URL БД берётся из переменной окружения DB_URL, иначе используется локальный sqlite.
+ # - URL БД берётся из VKMAX_DATABASE_URL (приоритет), затем DB_URL, иначе локальный sqlite.
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from sqlalchemy.orm import sessionmaker
 DEFAULT_SQLITE_PATH = Path(__file__).resolve().parent / "vkmax.sqlite3"
 DEFAULT_DB_URL = f"sqlite+aiosqlite:///{DEFAULT_SQLITE_PATH}"
 
-DB_URL = os.getenv("DB_URL", DEFAULT_DB_URL)
+DB_URL = os.getenv("VKMAX_DATABASE_URL") or os.getenv("DB_URL") or DEFAULT_DB_URL
 
 engine = create_async_engine(DB_URL, echo=False, future=True)
 

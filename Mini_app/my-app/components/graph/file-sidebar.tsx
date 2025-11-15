@@ -6,7 +6,6 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { useFileStore } from "@/lib/store"
 import { FileIcon } from "@/components/file-icon"
 import { cn } from "@/lib/utils"
-import { useEffect, useState } from "react"
 
 interface FileSidebarProps {
   isOpen: boolean
@@ -17,40 +16,6 @@ interface FileSidebarProps {
 
 export function FileSidebar({ isOpen, onClose, selectedFileId, onSelectFile }: FileSidebarProps) {
   const { files } = useFileStore()
-  const [mockFiles, setMockFiles] = useState<any[]>([])
-
-  useEffect(() => {
-    // Load mock files if no real files exist
-    if (files.length === 0) {
-      setMockFiles([
-        {
-          id: "1",
-          name: "sample-document.pdf",
-          originalFormat: "pdf",
-          size: 1048576,
-          uploadDate: new Date().toISOString(),
-        },
-        {
-          id: "2",
-          name: "financial-report.docx",
-          originalFormat: "docx",
-          size: 524288,
-          uploadDate: new Date(Date.now() - 86400000).toISOString(),
-        },
-        {
-          id: "3",
-          name: "data-export.csv",
-          originalFormat: "csv",
-          size: 262144,
-          uploadDate: new Date(Date.now() - 172800000).toISOString(),
-        },
-      ])
-    } else {
-      setMockFiles([])
-    }
-  }, [files.length])
-
-  const displayFiles = files.length > 0 ? files : mockFiles
 
   return (
     <>
@@ -73,12 +38,12 @@ export function FileSidebar({ isOpen, onClose, selectedFileId, onSelectFile }: F
 
         <ScrollArea className="h-[calc(100vh-64px)]">
           <div className="p-2 space-y-1">
-            {displayFiles.length === 0 ? (
+            {files.length === 0 ? (
               <div className="p-4 text-center text-sm text-muted-foreground">
                 Пока нет файлов. Загрузите файлы в конвертере, чтобы увидеть их здесь.
               </div>
             ) : (
-              displayFiles.map((file) => (
+              files.map((file) => (
                 <button
                   key={file.id}
                   onClick={() => {

@@ -1,3 +1,8 @@
+// Руководство к файлу (components/navigation/top-nav.tsx)
+// Назначение:
+// - Верхняя навигационная панель Mini_app VKMax.
+// - Ссылка-логотип ведёт на домашнюю страницу (/), пункты меню — на основные разделы.
+
 "use client"
 
 import Link from "next/link"
@@ -10,7 +15,7 @@ export function TopNav() {
 
   const links = [
     {
-      href: "/converter",
+      href: "/",
       label: "Converter",
       icon: FileText,
     },
@@ -25,7 +30,7 @@ export function TopNav() {
     <nav className="hidden md:block border-b bg-card">
       <div className="container mx-auto px-4">
         <div className="flex items-center gap-6 h-14">
-          <Link href="/converter" className="font-bold text-lg">
+          <Link href="/" className="font-bold text-lg">
             FileConverter
           </Link>
           <div className="flex gap-1 ml-auto">

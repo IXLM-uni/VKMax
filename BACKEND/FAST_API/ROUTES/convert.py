@@ -2,6 +2,8 @@
 # Назначение:
 # - Операции конвертации файлов/сайтов и их статусы поверх БД (SQLAlchemy async).
 # - Очередь/воркер не реализованы: создаём операции в статусе queued.
+# - Также содержит эндпоинт поиска графа /search/graph, который проксирует запрос
+#   в сервисы CONVERT (search_site_graph) и возвращает GraphJson.
 
 from __future__ import annotations
 
@@ -10,7 +12,7 @@ from typing import List, Optional, Dict, Any
 import logging
 
 from fastapi import APIRouter, HTTPException, Query, Depends
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import settings
@@ -23,6 +25,8 @@ from ..schemas import (
     WebsiteStatusResponse,
     WebsitePreviewRequest,
     WebsitePreviewResponse,
+    GraphSearchRequest,
+    GraphSearchResponse,
 )
 from BACKEND.DATABASE.session import get_db_session
 from BACKEND.DATABASE.CACHE_MANAGER import ConvertManager
@@ -33,6 +37,7 @@ from BACKEND.CONVERT import (
     enqueue_website_job,
     get_website_status,
     build_website_preview,
+    search_site_graph,
 )
 
 logger = logging.getLogger("vkmax.fastapi.convert")
@@ -51,10 +56,32 @@ async def _resolve_format_id(session: AsyncSession, fmt: Optional[str]) -> Optio
     query = select(Format)
     if key in {"graph", "graph_json"}:
         query = query.where(Format.type == "graph")
+    elif key in {"site_bundle", "site_bundle_json"}:
+        query = query.where(Format.type == "site_bundle")
     else:
         query = query.where(Format.file_extension.in_([key, f".{key}"]))
+
     res = await session.execute(query)
     f = res.scalars().first()
+
+    # Для совместимости с уже инициализированными SQLite-БД: если формат
+    # site_bundle ещё не был добавлен через seed_formats, создаём его на лету.
+    if f is None and key in {"site_bundle", "site_bundle_json"}:
+        # SQLite не даёт автоинкремент для BigInteger PRIMARY KEY, поэтому
+        # для нового формата вычисляем id вручную как max(id)+1, как в BaseManager.create.
+        max_id_res = await session.execute(select(func.max(Format.id)))
+        max_id = max_id_res.scalar() or 0
+        f = Format(
+            id=int(max_id) + 1,
+            type="site_bundle",
+            prompt=None,
+            file_extension=".site_bundle.json",
+            is_input=False,
+            is_output=True,
+        )
+        session.add(f)
+        await session.flush()
+
     return int(getattr(f, "id")) if f is not None else None
 
 
@@ -67,6 +94,8 @@ async def convert(payload: ConvertRequest, session: AsyncSession = Depends(get_d
 
     cm = ConvertManager(session)
     target_fmt_id = await _resolve_format_id(session, payload.target_format)
+    if payload.target_format and target_fmt_id is None:
+        raise HTTPException(422, "Unsupported target_format")
 
     logger.info("[/convert] create operation user_id=%s source_file_id=%s url=%s target_format=%s", payload.user_id, payload.source_file_id, payload.url, payload.target_format)
 
@@ -90,7 +119,7 @@ async def convert(payload: ConvertRequest, session: AsyncSession = Depends(get_d
         op = await cm.create_website_operation(user_id=int(payload.user_id) if payload.user_id else None, target_format_id=target_fmt_id)
         # Website-операции пока только логируем и оставляем в статусе queued
         try:
-            await enqueue_website_job(session, operation_id=int(getattr(op, "id")))
+            await enqueue_website_job(session, operation_id=int(getattr(op, "id")), url=payload.url)
         except Exception as exc:  # noqa: WPS430
             logger.exception("[/convert] Failed to enqueue website operation_id=%s: %s", getattr(op, "id"), exc)
 
@@ -106,7 +135,7 @@ async def convert_website(payload: ConvertWebsiteRequest, session: AsyncSession 
 
     op = await cm.create_website_operation(user_id=int(payload.user_id) if payload.user_id else None, target_format_id=target_fmt_id)
     try:
-        await enqueue_website_job(session, operation_id=int(getattr(op, "id")))
+        await enqueue_website_job(session, operation_id=int(getattr(op, "id")), url=payload.url)
     except Exception as exc:  # noqa: WPS430
         logger.exception("[/convert/website] Failed to enqueue website operation_id=%s: %s", getattr(op, "id"), exc)
 
@@ -155,6 +184,7 @@ async def get_operation(operation_id: str, session: AsyncSession = Depends(get_d
         datetime=str(op.get("datetime")),
         status=str(op.get("status")),
         progress=0,
+        result_file_id=str(op.get("result_file_id")) if op.get("result_file_id") is not None else None,
     )
 
 
@@ -233,3 +263,20 @@ async def website_history(user_id: Optional[str] = Query(None), session: AsyncSe
         }
         for r in rows
     ]
+
+
+@router.post("/search/graph", response_model=GraphSearchResponse)
+async def search_graph(payload: GraphSearchRequest, session: AsyncSession = Depends(get_db_session)):
+	"""Построение GraphJson/подграфа по файлу.
+
+	FastAPI только принимает параметры и вызывает сервис search_site_graph из
+	BACKEND.CONVERT. Логика поиска и работы с site_bundle живёт в webparser_service.
+	"""
+
+	try:
+		fid = int(payload.file_id)
+	except Exception:
+		raise HTTPException(400, "Bad file id")
+
+	graph = await search_site_graph(session, file_id=fid, query=payload.query)
+	return GraphSearchResponse(file_id=payload.file_id, graph=graph)

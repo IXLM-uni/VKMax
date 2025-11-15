@@ -159,11 +159,20 @@ def convert_docx_to_pdf(input_path: str, output_path: Optional[str] = None) -> C
     # DOCX → HTML (в памяти)
     with src.open("rb") as f:
         html_result = mammoth.convert_to_html(f)
-    html = html_result.value  # type: ignore[assignment]
+    html_body = html_result.value  # type: ignore[assignment]
+
+    # Оборачиваем в полноценный HTML-документ с charset UTF-8,
+    # чтобы pdfkit/wkhtmltopdf корректно обрабатывали кириллицу.
+    html = (
+        "<!DOCTYPE html>\n"
+        "<html><head><meta charset=\"utf-8\"></head><body>"
+        f"{html_body}"
+        "</body></html>"
+    )
 
     # HTML → PDF
     try:
-        pdfkit.from_string(html, str(dst))
+        pdfkit.from_string(html, str(dst), options={"encoding": "UTF-8"})
     except Exception as exc:  # pragma: no cover
         raise ConversionError(f"Failed to render PDF via pdfkit: {exc}") from exc
 
